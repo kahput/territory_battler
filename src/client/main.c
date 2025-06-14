@@ -32,47 +32,45 @@ int main() {
 	float delta_time = 0.0f;
 	float last_frame = 0.0f;
 
+	Color colors[5] = { RAYWHITE, RED, BLUE, GREEN, ORANGE };
+	uint32_t grid_target[GRID_SIZE * GRID_SIZE] = { 0 };
+
 	while (!WindowShouldClose()) {
 		ClearBackground(RAYWHITE);
 
-		int32_t x = roundf(player.position.x / (float)GRID_SIZE) * GRID_SIZE;
-		int32_t y = roundf(player.position.y / (float)GRID_SIZE) * GRID_SIZE;
+		player.direction.x = IsKeyDown(KEY_D) - IsKeyDown(KEY_A);
+		player.direction.y = IsKeyDown(KEY_S) - IsKeyDown(KEY_W);
 
-		if (IsKeyDown(KEY_W)) {
-			player.direction.y = -1;
-			player.direction.x = 0;
-			player.position.x = x;
-		}
-		if (IsKeyDown(KEY_A)) {
-			player.direction.x = -1;
-			player.direction.y = 0;
-			player.position.y = y;
-		}
-		if (IsKeyDown(KEY_S)) {
-			player.direction.y = 1;
-			player.direction.x = 0;
-			player.position.x = x;
-		}
-		if (IsKeyDown(KEY_D)) {
-			player.direction.x = 1;
-			player.direction.y = 0;
-			player.position.y = y;
-		}
 		float current_frame = GetTime();
 		delta_time = current_frame - last_frame;
 		last_frame = current_frame;
 
+		player.direction = Vector2Normalize(player.direction);
 		player.position = Vector2Add(player.position, Vector2Multiply(Vector2Multiply(player.direction, player.speed), (Vector2){ delta_time, delta_time }));
 
 		BeginDrawing();
 
-		for (uint32_t y = 0; y < WINDOW_HEIGHT; y += GRID_SIZE) {
-			for (uint32_t x = 0; x < WINDOW_WIDTH; x += GRID_SIZE) {
-				DrawRectangleLines(x, y , GRID_SIZE, GRID_SIZE, GRAY);
+		for (uint32_t y = 0; y < WINDOW_HEIGHT / GRID_SIZE; y++) {
+			for (uint32_t x = 0; x < WINDOW_WIDTH / GRID_SIZE; x++) {
+				uint32_t index = x + y * (WINDOW_WIDTH / GRID_SIZE);
+				DrawRectangle(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE, colors[grid_target[index]]);
+				DrawRectangleLines(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE, GRAY);
 			}
 		}
 
-		DrawRectangleV((Vector2){ .x = x, .y = y }, player.size, RED);
+		int32_t x = roundf(player.position.x / (float)GRID_SIZE) * GRID_SIZE;
+		int32_t y = roundf(player.position.y / (float)GRID_SIZE) * GRID_SIZE;
+		uint32_t index = (x / GRID_SIZE) + (y / GRID_SIZE) * (WINDOW_WIDTH / GRID_SIZE);
+
+		grid_target[index] = 1;
+
+		DrawRectangleV((Vector2){ x, y }, player.size, RED);
+		DrawRectangleLinesEx((Rectangle){
+								 .x = x,
+								 .y = y,
+								 .width = player.size.x,
+								 .height = player.size.y },
+			2, BLACK);
 
 		EndDrawing();
 	}
