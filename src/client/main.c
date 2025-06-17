@@ -1,3 +1,5 @@
+#include "common/darray.h"
+
 #include <math.h>
 #include <raylib.h>
 #include <raymath.h>
@@ -8,6 +10,8 @@
 #define WINDOW_WIDTH 1280
 #define WINDOW_HEIGHT 736
 #define GRID_SIZE 32
+#define ROWS (WINDOW_HEIGHT / GRID_SIZE)
+#define COLUMNS (WINDOW_WIDTH / GRID_SIZE)
 
 typedef struct _player {
 	Vector2 position, size;
@@ -15,6 +19,7 @@ typedef struct _player {
 } Player;
 
 void draw_grid(uint32_t grid_target[GRID_SIZE * GRID_SIZE]);
+bool grid_fill(uint32_t index, uint32_t target, uint32_t grid[GRID_SIZE * GRID_SIZE]);
 
 Vector2 to_vec2(int32_t direction);
 void print_player(Player p);
@@ -27,6 +32,7 @@ int main() {
 		.size = { GRID_SIZE, GRID_SIZE },
 		.speed = 128
 	};
+
 
 	float delta_time = 0.0f;
 	float last_frame = 0.0f;
@@ -79,6 +85,8 @@ int main() {
 								 .height = player.size.y },
 			2, BLACK);
 
+		grid_fill(index, 1, grid_target);
+
 		EndDrawing();
 	}
 
@@ -101,14 +109,59 @@ void print_player(Player p) {
 }
 
 void draw_grid(uint32_t grid_target[GRID_SIZE * GRID_SIZE]) {
-	uint32_t rows = WINDOW_HEIGHT / GRID_SIZE, columns = WINDOW_WIDTH / GRID_SIZE;
 	static Color colors[5] = { RAYWHITE, RED, BLUE, GREEN, ORANGE };
 
-	for (uint32_t y = 0; y < rows; y++) {
-		for (uint32_t x = 0; x < columns; x++) {
-			uint32_t index = x + y * columns;
+	for (uint32_t y = 0; y < ROWS; y++) {
+		for (uint32_t x = 0; x < COLUMNS; x++) {
+			uint32_t index = x + y * COLUMNS;
 			DrawRectangle(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE, colors[grid_target[index]]);
 			DrawRectangleLines(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE, GRAY);
 		}
 	}
+}
+
+bool check_neighbor(uint32_t current, uint32_t indicies[4], uint32_t grid[GRID_SIZE * GRID_SIZE]) {
+	uint32_t x = current % COLUMNS, y = current / COLUMNS;
+	uint32_t neighbor_count = 0;
+	// Up
+	if (y > 0) {
+		uint32_t index = x + (y - 1) * COLUMNS;
+		if (grid[index] == 1)
+			neighbor_count++;
+	}
+	// Right
+	if (x > 0) {
+		uint32_t index = (x + 1) + y * COLUMNS;
+		if (grid[index] == 1)
+			neighbor_count++;
+	}
+	// Down
+	if (x < (ROWS - 1)) {
+		uint32_t index = x + (y + 1) * COLUMNS;
+		if (grid[index] == 1)
+			neighbor_count++;
+	}
+	// Left
+	if (x < (COLUMNS - 1)) {
+		uint32_t index = (x - 1) + y * COLUMNS;
+		if (grid[index] == 1)
+			neighbor_count++;
+	}
+
+	return neighbor_count >= 2;
+}
+
+bool grid_fill(uint32_t index, uint32_t target, uint32_t grid[GRID_SIZE * GRID_SIZE]) {
+	uint32_t stack[GRID_SIZE * GRID_SIZE];
+	uint32_t pointer = 0, filled = 0;
+	stack[pointer++] = index;
+
+	while (pointer) {
+		uint32_t current = stack[--pointer];
+		uint32_t indices[4] = { 0 };
+		if (check_neighbor(current, indices, grid))
+			printf("Enclosure possible!\n\n");
+	}
+
+	return filled;
 }

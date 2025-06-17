@@ -1,4 +1,4 @@
-file(GLOB_RECURSE SOURCES "./*.c" "./*.h" "${PROJECT_SOURCE_DIR}/ext/stb_image/*.c" "${PROJECT_SOURCE_DIR}/ext/stb_image/*.h")
+file(GLOB_RECURSE SOURCES "./*.c" "./*.h" "${PROJECT_SOURCE_DIR}/src/common/*.c" "${PROJECT_SOURCE_DIR}/src/common/*.h" "${PROJECT_SOURCE_DIR}/ext/stb_image/*.c" "${PROJECT_SOURCE_DIR}/ext/stb_image/*.h")
 
 find_package(raylib)
 
@@ -9,3 +9,4 @@ target_link_libraries( client
         glad_gl_core_45
         glfw
     )
+target_include_directories(client PRIVATE ${PROJECT_SOURCE_DIR}/src)
