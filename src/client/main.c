@@ -1,4 +1,4 @@
-#include "common/darray.h"
+#include "common/arena.h"
 
 #include <math.h>
 #include <raylib.h>
@@ -18,8 +18,12 @@ typedef struct _player {
 	int direction, speed;
 } Player;
 
+typedef struct _game_state {
+	Arena *permanent_arena, *frame_arena;
+} GameState;
+
 void draw_grid(uint32_t grid_target[GRID_SIZE * GRID_SIZE]);
-bool grid_fill(uint32_t index, uint32_t target, uint32_t grid[GRID_SIZE * GRID_SIZE]);
+bool grid_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid[GRID_SIZE * GRID_SIZE]);
 
 Vector2 to_vec2(int32_t direction);
 void print_player(Player p);
@@ -33,16 +37,21 @@ int main() {
 		.speed = 128
 	};
 
-
 	float delta_time = 0.0f;
 	float last_frame = 0.0f;
 
-	uint32_t grid_target[GRID_SIZE * GRID_SIZE] = { 0 };
+	GameState state = {
+		.permanent_arena = arena_alloc(),
+		.frame_arena = arena_alloc()
+	};
+
+	uint32_t* grid_target = arena_push_array(state.permanent_arena, uint32_t, GRID_SIZE* GRID_SIZE);
 
 	float step_timer = 0;
 
 	while (!WindowShouldClose()) {
 		ClearBackground(RAYWHITE);
+		arena_clear(state.frame_arena);
 
 		float current_frame = GetTime();
 		delta_time = current_frame - last_frame;
@@ -85,7 +94,7 @@ int main() {
 								 .height = player.size.y },
 			2, BLACK);
 
-		grid_fill(index, 1, grid_target);
+		grid_fill(state.frame_arena, index, 1, grid_target);
 
 		EndDrawing();
 	}
@@ -120,47 +129,57 @@ void draw_grid(uint32_t grid_target[GRID_SIZE * GRID_SIZE]) {
 	}
 }
 
-bool check_neighbor(uint32_t current, uint32_t indicies[4], uint32_t grid[GRID_SIZE * GRID_SIZE]) {
-	uint32_t x = current % COLUMNS, y = current / COLUMNS;
-	uint32_t neighbor_count = 0;
+void check_neighbor(uint32_t index, uint32_t* neighbors, uint32_t* neighbor_count, uint32_t grid[GRID_SIZE * GRID_SIZE]) {
+	uint32_t x = index % COLUMNS, y = index / COLUMNS;
+
 	// Up
 	if (y > 0) {
 		uint32_t index = x + (y - 1) * COLUMNS;
-		if (grid[index] == 1)
-			neighbor_count++;
+		if (grid[index] == 1) {
+			neighbors[*neighbor_count] = index;
+			*neighbor_count += 1;
+		}
 	}
 	// Right
 	if (x > 0) {
 		uint32_t index = (x + 1) + y * COLUMNS;
-		if (grid[index] == 1)
-			neighbor_count++;
+		if (grid[index] == 1) {
+			neighbors[*neighbor_count] = index;
+			*neighbor_count += 1;
+		}
 	}
 	// Down
 	if (x < (ROWS - 1)) {
 		uint32_t index = x + (y + 1) * COLUMNS;
-		if (grid[index] == 1)
-			neighbor_count++;
+		if (grid[index] == 1) {
+			neighbors[*neighbor_count] = index;
+			*neighbor_count += 1;
+		}
 	}
 	// Left
 	if (x < (COLUMNS - 1)) {
 		uint32_t index = (x - 1) + y * COLUMNS;
-		if (grid[index] == 1)
-			neighbor_count++;
+		if (grid[index] == 1) {
+			neighbors[*neighbor_count] = index;
+			*neighbor_count += 1;
+		}
 	}
-
-	return neighbor_count >= 2;
 }
 
-bool grid_fill(uint32_t index, uint32_t target, uint32_t grid[GRID_SIZE * GRID_SIZE]) {
+bool grid_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid[GRID_SIZE * GRID_SIZE]) {
 	uint32_t stack[GRID_SIZE * GRID_SIZE];
 	uint32_t pointer = 0, filled = 0;
 	stack[pointer++] = index;
 
 	while (pointer) {
 		uint32_t current = stack[--pointer];
-		uint32_t indices[4] = { 0 };
-		if (check_neighbor(current, indices, grid))
-			printf("Enclosure possible!\n\n");
+		uint32_t* neighbor_count = arena_push_type(arena, uint32_t);
+		*neighbor_count = 0;
+		uint32_t* neighbors = arena_push_array(arena, uint32_t, 4);
+		check_neighbor(current, neighbors, neighbor_count, grid);
+		// if (darray_length(indices) >= 2)
+		// 	printf("Enclosure possible!\n\n");
+		printf("neighbor_count = %i\n", *neighbor_count);
 	}
 
 	return filled;
