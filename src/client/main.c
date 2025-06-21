@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #define WINDOW_WIDTH 1280
 #define WINDOW_HEIGHT 736
@@ -15,15 +16,18 @@
 
 typedef struct _player {
 	Vector2 position, size;
-	int direction, speed;
+	int32_t direction, speed, color_id;
 } Player;
+
+static Color colors[5] = { RAYWHITE, RED, BLUE, GREEN, ORANGE };
 
 typedef struct _game_state {
 	Arena *permanent_arena, *frame_arena;
 } GameState;
 
-void draw_grid(uint32_t grid_target[GRID_SIZE * GRID_SIZE]);
-bool grid_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid[GRID_SIZE * GRID_SIZE]);
+uint32_t owned_neighbor_count(uint32_t target, uint32_t index);
+void draw_grid(uint32_t grid_target[ROWS * COLUMNS]);
+bool encolsure_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid[ROWS * COLUMNS]);
 
 Vector2 to_vec2(int32_t direction);
 void print_player(Player p);
@@ -34,7 +38,8 @@ int main() {
 	Player player = {
 		.position = { 3 * GRID_SIZE, 3 * GRID_SIZE },
 		.size = { GRID_SIZE, GRID_SIZE },
-		.speed = 128
+		.speed = 128,
+		.color_id = 1
 	};
 
 	float delta_time = 0.0f;
@@ -45,7 +50,8 @@ int main() {
 		.frame_arena = arena_alloc()
 	};
 
-	uint32_t* grid_target = arena_push_array(state.permanent_arena, uint32_t, GRID_SIZE* GRID_SIZE);
+	uint32_t* grid_target = arena_push_array(state.permanent_arena, uint32_t, ROWS* COLUMNS);
+	memset(grid_target, 0, sizeof(uint32_t) * ROWS * COLUMNS);
 
 	float step_timer = 0;
 
@@ -60,7 +66,11 @@ int main() {
 		step_timer += player.speed * delta_time;
 
 		if (step_timer >= 32 && player.direction != 0) {
-			player.position = Vector2Add(player.position, Vector2Scale(to_vec2(player.direction), GRID_SIZE));
+			Vector2 new_position = Vector2Add(player.position, Vector2Scale(to_vec2(player.direction), GRID_SIZE));
+			if (new_position.x >= 0 && (int)(new_position.x / GRID_SIZE) < COLUMNS)
+				player.position.x = new_position.x;
+			if (new_position.y >= 0 && (int)(new_position.y / GRID_SIZE) < ROWS)
+				player.position.y = new_position.y;
 			step_timer = 0;
 		}
 
@@ -73,6 +83,8 @@ int main() {
 			new_direction = 3;
 		if (IsKeyDown(KEY_A))
 			new_direction = 4;
+		if (IsKeyPressed(KEY_SPACE))
+			player.direction = 0;
 
 		if (new_direction != 0 && player.direction != new_direction) {
 			step_timer = 0;
@@ -83,18 +95,23 @@ int main() {
 
 		draw_grid(grid_target);
 
-		uint32_t index = (player.position.x / GRID_SIZE) + (player.position.y / GRID_SIZE) * ((float)WINDOW_WIDTH / GRID_SIZE);
-		grid_target[index] = 1;
+		uint32_t index = (int32_t)(player.position.x / GRID_SIZE) + (int32_t)(player.position.y / GRID_SIZE) * COLUMNS;
+		if (grid_target[index] == player.color_id) {
+		} else
+			grid_target[index] = player.color_id;
 
-		DrawRectangleV((Vector2){ player.position.x, player.position.y }, player.size, RED);
+		encolsure_fill(state.frame_arena, index, player.color_id, grid_target);
+
+		if (IsKeyPressed(KEY_SPACE))
+			encolsure_fill(state.frame_arena, index, player.color_id, grid_target);
+
+		DrawRectangleV((Vector2){ player.position.x, player.position.y }, player.size, colors[player.color_id]);
 		DrawRectangleLinesEx((Rectangle){
 								 .x = player.position.x,
 								 .y = player.position.y,
 								 .width = player.size.x,
 								 .height = player.size.y },
 			2, BLACK);
-
-		grid_fill(state.frame_arena, index, 1, grid_target);
 
 		EndDrawing();
 	}
@@ -117,70 +134,89 @@ void print_player(Player p) {
 		p.position.x, p.position.y);
 }
 
-void draw_grid(uint32_t grid_target[GRID_SIZE * GRID_SIZE]) {
-	static Color colors[5] = { RAYWHITE, RED, BLUE, GREEN, ORANGE };
-
+void draw_grid(uint32_t grid_target[ROWS * COLUMNS]) {
 	for (uint32_t y = 0; y < ROWS; y++) {
 		for (uint32_t x = 0; x < COLUMNS; x++) {
-			uint32_t index = x + y * COLUMNS;
+			uint32_t index = x + (y * COLUMNS);
 			DrawRectangle(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE, colors[grid_target[index]]);
 			DrawRectangleLines(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE, GRAY);
 		}
 	}
 }
 
-void check_neighbor(uint32_t index, uint32_t* neighbors, uint32_t* neighbor_count, uint32_t grid[GRID_SIZE * GRID_SIZE]) {
-	uint32_t x = index % COLUMNS, y = index / COLUMNS;
+void flood_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid[ROWS * COLUMNS]) {
+	int32_t* stack = arena_push_array(arena, int32_t, ROWS* COLUMNS);
+	bool* visisted = arena_push_array(arena, bool, ROWS* COLUMNS);
+	uint32_t* result = arena_push_array(arena, uint32_t, ROWS* COLUMNS);
+	memset(visisted, 0, ROWS * COLUMNS);
+	uint32_t stack_pointer = 0, result_pointer = 0;
+	stack[stack_pointer++] = index;
 
-	// Up
-	if (y > 0) {
-		uint32_t index = x + (y - 1) * COLUMNS;
-		if (grid[index] == 1) {
-			neighbors[*neighbor_count] = index;
-			*neighbor_count += 1;
-		}
+	while (stack_pointer) {
+		int32_t current_index = stack[--stack_pointer];
+		int32_t x = current_index % COLUMNS, y = current_index / COLUMNS;
+
+		if (x < 0 || x >= COLUMNS || y < 0 || y >= ROWS)
+			return;
+
+		if (visisted[current_index] == true || grid[current_index] == target)
+			continue;
+
+		visisted[current_index] = true;
+		result[result_pointer++] = current_index;
+		stack[stack_pointer++] = (x + 0) + (y - 1) * COLUMNS;
+		stack[stack_pointer++] = (x + 1) + (y - 1) * COLUMNS;
+		stack[stack_pointer++] = (x + 1) + (y + 0) * COLUMNS;
+		stack[stack_pointer++] = (x + 1) + (y + 1) * COLUMNS;
+		stack[stack_pointer++] = (x + 0) + (y + 1) * COLUMNS;
+		stack[stack_pointer++] = (x - 1) + (y + 1) * COLUMNS;
+		stack[stack_pointer++] = (x - 1) + (y - 0) * COLUMNS;
+		stack[stack_pointer++] = (x - 1) + (y - 1) * COLUMNS;
 	}
-	// Right
-	if (x > 0) {
-		uint32_t index = (x + 1) + y * COLUMNS;
-		if (grid[index] == 1) {
-			neighbors[*neighbor_count] = index;
-			*neighbor_count += 1;
-		}
-	}
-	// Down
-	if (x < (ROWS - 1)) {
-		uint32_t index = x + (y + 1) * COLUMNS;
-		if (grid[index] == 1) {
-			neighbors[*neighbor_count] = index;
-			*neighbor_count += 1;
-		}
-	}
-	// Left
-	if (x < (COLUMNS - 1)) {
-		uint32_t index = (x - 1) + y * COLUMNS;
-		if (grid[index] == 1) {
-			neighbors[*neighbor_count] = index;
-			*neighbor_count += 1;
-		}
+
+	for (uint32_t i = 0; i < result_pointer; i++) {
+		uint32_t index = result[i];
+		grid[index] = target;
 	}
 }
 
-bool grid_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid[GRID_SIZE * GRID_SIZE]) {
-	uint32_t stack[GRID_SIZE * GRID_SIZE];
-	uint32_t pointer = 0, filled = 0;
-	stack[pointer++] = index;
+bool encolsure_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid[ROWS * COLUMNS]) {
+	int32_t* neighbors = arena_push_array(arena, int32_t, 8);
+	uint32_t neighbor_count = 0;
 
-	while (pointer) {
-		uint32_t current = stack[--pointer];
-		uint32_t* neighbor_count = arena_push_type(arena, uint32_t);
-		*neighbor_count = 0;
-		uint32_t* neighbors = arena_push_array(arena, uint32_t, 4);
-		check_neighbor(current, neighbors, neighbor_count, grid);
-		// if (darray_length(indices) >= 2)
-		// 	printf("Enclosure possible!\n\n");
-		printf("neighbor_count = %i\n", *neighbor_count);
+	uint32_t x = index % COLUMNS, y = index / COLUMNS;
+	if (y > 0 && grid[x + (y - 1) * COLUMNS] != target) {
+		neighbors[neighbor_count++] = (x + 0) + (y - 1) * COLUMNS;
+	}
+	if (y > 0 && x < (COLUMNS - 1) && grid[(x + 1) + (y - 1) * COLUMNS] != target) {
+		neighbors[neighbor_count++] = (x + 1) + (y - 1) * COLUMNS;
+	}
+	if (x < (COLUMNS - 1) && grid[(x + 1) + (y - 0) * COLUMNS] != target) {
+		neighbors[neighbor_count++] = (x + 1) + (y - 0) * COLUMNS;
+	}
+	if (x < (COLUMNS - 1) && y < (ROWS - 1) && grid[(x + 1) + (y + 1) * COLUMNS] != target) {
+		neighbors[neighbor_count++] = (x + 1) + (y + 1) * COLUMNS;
+	}
+	if (y < (ROWS - 1) && grid[(x + 0) + (y + 1) * COLUMNS] != target) {
+		neighbors[neighbor_count++] = (x + 0) + (y + 1) * COLUMNS;
+	}
+	if (y < (ROWS - 1) && x > 0 && grid[(x - 1) + (y + 1) * COLUMNS] != target) {
+		neighbors[neighbor_count++] = (x - 1) + (y + 1) * COLUMNS;
+	}
+	if (x > 0 && grid[(x - 1) + y * COLUMNS] != target) {
+		neighbors[neighbor_count++] = (x - 1) + (y + 0) * COLUMNS;
+	}
+	if (x > 0 && y > 0 && grid[(x - 1) + (y - 1) * COLUMNS] != target) {
+		neighbors[neighbor_count++] = (x - 1) + (y - 1) * COLUMNS;
 	}
 
-	return filled;
+	for (uint32_t i = 0; i < neighbor_count; i++) {
+		uint32_t neighbor_index = neighbors[i];
+		uint32_t nx = neighbor_index % COLUMNS, ny = neighbor_index / COLUMNS;
+
+		size_t offset = arena_size(arena);
+		flood_fill(arena, neighbor_index, target, grid);
+		arena_set(arena, offset);
+	}
+	return true;
 }
