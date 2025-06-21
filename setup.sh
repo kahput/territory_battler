@@ -9,7 +9,7 @@ build() {
     echo "[INFO] Building project..."
     mkdir -p "$BUILD_DIR"
     cd "$BUILD_DIR" || exit 1
-    cmake -DCMAKE_C_STANDARD=99 "$PROJECT_ROOT"
+    cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_STANDARD=99 "$PROJECT_ROOT"
 }
 
 # Function to clean the build directory
