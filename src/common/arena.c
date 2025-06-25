@@ -43,5 +43,5 @@ void arena_set(Arena* arena, size_t position) {
 }
 
 size_t arena_size(Arena* arena) {
-	return arena->offset; 
+	return arena->offset;
 }

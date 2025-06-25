@@ -1,12 +1,14 @@
 #include "common/arena.h"
+#include "common/sockets.h"
 
-#include <math.h>
 #include <raylib.h>
 #include <raymath.h>
 
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <sys/socket.h>
 
 #define WINDOW_WIDTH 1280
 #define WINDOW_HEIGHT 736
@@ -24,6 +26,9 @@ static Color colors[5] = { RAYWHITE, RED, BLUE, GREEN, ORANGE };
 typedef struct _game_state {
 	Arena *permanent_arena, *frame_arena;
 } GameState;
+
+int32_t create_client();
+bool connect_server(int32_t client, const char* address, int16_t port);
 
 uint32_t owned_neighbor_count(uint32_t target, uint32_t index);
 void draw_grid(uint32_t grid_target[ROWS * COLUMNS]);
@@ -49,6 +54,9 @@ int main() {
 		.permanent_arena = arena_alloc(),
 		.frame_arena = arena_alloc()
 	};
+
+	Socket* client = socket_create(state.permanent_arena, AF_INET, SOCK_STREAM);
+	socket_connect(client, "127.0.0.1", 5050);
 
 	uint32_t* grid_target = arena_push_array(state.permanent_arena, uint32_t, ROWS* COLUMNS);
 	memset(grid_target, 0, sizeof(uint32_t) * ROWS * COLUMNS);
@@ -115,6 +123,9 @@ int main() {
 
 		EndDrawing();
 	}
+
+	arena_free(state.frame_arena);
+	arena_free(state.permanent_arena);
 
 	CloseWindow();
 	return 0;
