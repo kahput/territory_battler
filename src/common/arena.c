@@ -2,8 +2,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-struct _arena_handle {
+struct arena {
 	size_t offset, capacity;
 	void* data;
 };
@@ -26,10 +27,26 @@ void arena_free(Arena* arena) {
 
 void* arena_push(Arena* arena, size_t size) {
 	if (arena->offset + size >= arena->capacity) {
+		fprintf(stderr, "ARENA_OUT_OF_MEMORY\n");
+		exit(1);
 		return NULL;
 	}
 
 	void* result = arena->data + arena->offset;
+	arena->offset += size;
+
+	return result;
+}
+
+void* arena_push_zero(Arena* arena, size_t size) {
+	if (arena->offset + size >= arena->capacity) {
+		fprintf(stderr, "ARENA_OUT_OF_MEMORY\n");
+		exit(1);
+		return NULL;
+	}
+
+	void* result = arena->data + arena->offset;
+	memset(result, 0, size);
 	arena->offset += size;
 
 	return result;

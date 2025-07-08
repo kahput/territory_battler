@@ -1,5 +1,6 @@
+#include "client/client.h"
 #include "common/arena.h"
-#include "common/sockets.h"
+#include "common/types.h"
 
 #include <raylib.h>
 #include <raymath.h>
@@ -27,17 +28,17 @@ typedef struct _game_state {
 	Arena *permanent_arena, *frame_arena;
 } GameState;
 
-int32_t create_client();
-bool connect_server(int32_t client, const char* address, int16_t port);
-
 uint32_t owned_neighbor_count(uint32_t target, uint32_t index);
-void draw_grid(uint32_t grid_target[ROWS * COLUMNS]);
-bool encolsure_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid[ROWS * COLUMNS]);
+void draw_grid(uint8_t grid_target[ROWS * COLUMNS]);
+bool encolsure_fill(Arena *arena, uint32_t index, uint32_t target, uint8_t grid[ROWS * COLUMNS]);
 
 Vector2 to_vec2(int32_t direction);
 void print_player(Player p);
 
-int main() {
+int main(int32_t argc, char *argv[]) {
+	if (argc > 1 && strcmp(argv[1], "headless") == 0)
+		SetConfigFlags(FLAG_WINDOW_HIDDEN);
+
 	InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Land.io");
 
 	Player player = {
@@ -55,17 +56,29 @@ int main() {
 		.frame_arena = arena_alloc()
 	};
 
-	Socket* client = socket_create(state.permanent_arena, AF_INET, SOCK_STREAM);
-	socket_connect(client, "127.0.0.1", 5050);
+	Client *client = client_create(state.permanent_arena);
+	client_connect(client, "127.0.0.1", 5050);
 
-	uint32_t* grid_target = arena_push_array(state.permanent_arena, uint32_t, ROWS* COLUMNS);
-	memset(grid_target, 0, sizeof(uint32_t) * ROWS * COLUMNS);
-
+	uint8_t *grid_target = arena_push_array_zero(state.permanent_arena, uint8_t, ROWS *COLUMNS);
 	float step_timer = 0;
 
 	while (!WindowShouldClose()) {
 		ClearBackground(RAYWHITE);
 		arena_clear(state.frame_arena);
+
+		client_update(state.frame_arena, client);
+
+		NetEvent event;
+		while (client_poll(client, &event)) {
+			if (event.type == NET_EVENT_RECEIVE) {
+				printf("Message: %s\n", event.data);
+
+				char answer[1024];
+				snprintf(answer, 1024, "Client ACK message [%s]", event.data);
+
+				client_send(client, answer, sizeof answer);
+			}
+		}
 
 		float current_frame = GetTime();
 		delta_time = current_frame - last_frame;
@@ -104,14 +117,8 @@ int main() {
 		draw_grid(grid_target);
 
 		uint32_t index = (int32_t)(player.position.x / GRID_SIZE) + (int32_t)(player.position.y / GRID_SIZE) * COLUMNS;
-		if (grid_target[index] == player.color_id) {
-		} else
-			grid_target[index] = player.color_id;
-
+		grid_target[index] = player.color_id;
 		encolsure_fill(state.frame_arena, index, player.color_id, grid_target);
-
-		if (IsKeyPressed(KEY_SPACE))
-			encolsure_fill(state.frame_arena, index, player.color_id, grid_target);
 
 		DrawRectangleV((Vector2){ player.position.x, player.position.y }, player.size, colors[player.color_id]);
 		DrawRectangleLinesEx((Rectangle){
@@ -145,7 +152,7 @@ void print_player(Player p) {
 		p.position.x, p.position.y);
 }
 
-void draw_grid(uint32_t grid_target[ROWS * COLUMNS]) {
+void draw_grid(uint8_t grid_target[ROWS * COLUMNS]) {
 	for (uint32_t y = 0; y < ROWS; y++) {
 		for (uint32_t x = 0; x < COLUMNS; x++) {
 			uint32_t index = x + (y * COLUMNS);
@@ -155,10 +162,10 @@ void draw_grid(uint32_t grid_target[ROWS * COLUMNS]) {
 	}
 }
 
-void flood_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid[ROWS * COLUMNS]) {
-	int32_t* stack = arena_push_array(arena, int32_t, ROWS* COLUMNS);
-	bool* visisted = arena_push_array(arena, bool, ROWS* COLUMNS);
-	uint32_t* result = arena_push_array(arena, uint32_t, ROWS* COLUMNS);
+void flood_fill(Arena *arena, uint32_t index, uint32_t target, uint8_t grid[ROWS * COLUMNS]) {
+	int32_t *stack = arena_push_array(arena, int32_t, ROWS *COLUMNS);
+	bool *visisted = arena_push_array(arena, bool, ROWS *COLUMNS);
+	uint32_t *result = arena_push_array(arena, uint32_t, ROWS *COLUMNS);
 	memset(visisted, 0, ROWS * COLUMNS);
 	uint32_t stack_pointer = 0, result_pointer = 0;
 	stack[stack_pointer++] = index;
@@ -191,8 +198,8 @@ void flood_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid[ROW
 	}
 }
 
-bool encolsure_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid[ROWS * COLUMNS]) {
-	int32_t* neighbors = arena_push_array(arena, int32_t, 8);
+bool encolsure_fill(Arena *arena, uint32_t index, uint32_t target, uint8_t grid[ROWS * COLUMNS]) {
+	int32_t *neighbors = arena_push_array(arena, int32_t, 8);
 	uint32_t neighbor_count = 0;
 
 	uint32_t x = index % COLUMNS, y = index / COLUMNS;
@@ -223,7 +230,6 @@ bool encolsure_fill(Arena* arena, uint32_t index, uint32_t target, uint32_t grid
 
 	for (uint32_t i = 0; i < neighbor_count; i++) {
 		uint32_t neighbor_index = neighbors[i];
-		uint32_t nx = neighbor_index % COLUMNS, ny = neighbor_index / COLUMNS;
 
 		size_t offset = arena_size(arena);
 		flood_fill(arena, neighbor_index, target, grid);

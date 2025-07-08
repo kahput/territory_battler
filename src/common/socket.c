@@ -1,4 +1,4 @@
-#include "sockets.h"
+#include "socket.h"
 #include "arena.h"
 
 #include <arpa/inet.h>
@@ -10,7 +10,7 @@
 #include <unistd.h>
 
 struct _socket {
-	int32_t domain, type, file_descriptor;
+	int32_t file_descriptor, domain, type;
 	struct sockaddr_storage address;
 };
 
@@ -25,7 +25,6 @@ Socket* socket_create(Arena* arena, int32_t domain, int32_t type) {
 bool socket_bind(Socket* sock, const char* address, int16_t port) {
 	struct addrinfo hints, *server_info, *p;
 	int32_t yes = 1, result;
-	socklen_t sin_size;
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = sock->domain;
@@ -104,7 +103,7 @@ Socket* socket_accept(Arena* arena, Socket* server_socket) {
 	return client_socket;
 }
 
-bool socket_connect(Socket* sock, const char* address, int16_t port) {
+bool socket_connect(Socket* sock, const char* address, uint16_t port) {
 	struct addrinfo hints, *server_info, *p;
 	int32_t yes = 1, result;
 	socklen_t sin_size;
@@ -113,9 +112,8 @@ bool socket_connect(Socket* sock, const char* address, int16_t port) {
 	hints.ai_family = sock->domain;
 	hints.ai_socktype = sock->type;
 
-	char str_port[5];
-	sprintf(str_port, "%d", port);
-	str_port[4] = '\0';
+	char str_port[6];
+	snprintf(str_port, sizeof str_port, "%d", port);
 
 	if ((result = getaddrinfo(address, str_port, &hints, &server_info)) != 0) {
 		fprintf(stderr, "ERROR: %s", gai_strerror(result));
@@ -128,19 +126,13 @@ bool socket_connect(Socket* sock, const char* address, int16_t port) {
 			continue;
 		}
 
-		if (setsockopt(sock->file_descriptor, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
-			perror("socket_connect -> setsockopt()");
-			return false;
-		}
-
 		char address_buffer[INET6_ADDRSTRLEN];
-
 		inet_ntop(server_info->ai_family, server_info->ai_addr, address_buffer, sizeof address_buffer);
 		printf("Client: attempting connection to %s\n", address_buffer);
 
 		if (connect(sock->file_descriptor, p->ai_addr, p->ai_addrlen) == -1) {
 			close(sock->file_descriptor);
-			perror("socket_connect -> bind()");
+			perror("socket_connect -> connect()");
 			continue;
 		}
 
@@ -154,9 +146,36 @@ bool socket_connect(Socket* sock, const char* address, int16_t port) {
 	}
 	char address_buffer[INET6_ADDRSTRLEN];
 	inet_ntop(server_info->ai_family, server_info->ai_addr, address_buffer, sizeof address_buffer);
-		printf("Client: connected to %s\n", address_buffer);
+	printf("Client: connected to %s\n", address_buffer);
 
 	freeaddrinfo(server_info);
 
 	return true;
+}
+
+int32_t socket_fd(Socket* sock) {
+	return sock->file_descriptor;
+}
+
+int32_t socket_send(Socket* sock, const int8_t* data, uint32_t size) {
+	int32_t bytes_sent = 0;
+	while (bytes_sent < size) {
+		int32_t result = send(sock->file_descriptor, data, size, 0);
+		if (result == -1) {
+			perror("send");
+			return false;
+		}
+
+		bytes_sent += result;
+	}
+	return bytes_sent;
+}
+
+int32_t socket_recv(Socket* sock, void* data, uint32_t size) {
+	int32_t result = recv(sock->file_descriptor, data, size, 0);
+	if (result == -1) {
+		perror("recv");
+		return false;
+	}
+	return result;
 }
