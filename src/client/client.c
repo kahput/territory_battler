@@ -5,7 +5,6 @@
 #include "common/types.h"
 
 #include <netinet/in.h>
-#include <stdio.h>
 #include <string.h>
 
 #include <sys/poll.h>
@@ -48,11 +47,12 @@ void client_update(Arena* arena, Client* client) {
 		if ((result = socket_recv(client->socket, &header, sizeof(header), MSG_PEEK)) == 0)
 			return;
 
-		uint32_t size = (ntohl(header.rows) * ntohl(header.columns));
-		uint8_t buffer[sizeof(MessageHeader) + size];
+		uint32_t grid_size = (ntohl(header.rows) * ntohl(header.columns));
+		uint32_t player_size = header.player_count * sizeof(PlayerState);
+		uint8_t buffer[sizeof(MessageHeader) + grid_size + player_size];
 
 		uint32_t received_bytes = 0;
-		while (received_bytes < size) {
+		while (received_bytes < (grid_size + player_size)) {
 			if ((result = socket_recv(client->socket, buffer, sizeof(buffer), 0)) == 0)
 				return;
 			received_bytes += result;

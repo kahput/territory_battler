@@ -57,9 +57,9 @@ void server_update(Arena* arena, Server* server) {
 		};
 	}
 
-	int32_t poll_count = poll(poll_list, poll_list_count, -1);
+	int32_t poll_count = poll(poll_list, poll_list_count, 100);
 
-	if (poll_count <= 0) {
+	if (poll_count < 0) {
 		perror("poll");
 		return;
 	}
@@ -133,7 +133,7 @@ void server_send(Server* server, int32_t client_id, void* data, int32_t size) {
 }
 void server_broadcast(Server* server, void* data, int32_t size) {
 	for (uint32_t i = 0; i < server->client_count; i++) {
-		printf("Sending message to client %i\n", i + 1);
+		// printf("Sending message to client %i\n", i + 1);
 		socket_send(server->clients[i].sock, data, size);
 	}
 }

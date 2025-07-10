@@ -21,12 +21,18 @@ typedef struct net_event {
 typedef enum {
 	MESSAGE_TYPE_NONE,
 	MESSAGE_TYPE_DIRECTION,
-	MESSAGE_TYPE_WORLD_DATA,
+	MESSAGE_TYPE_GAME_STATE,
 
 	MESSAGE_TYPE_COUNT
 } MessageType;
 
-typedef struct message_header {
+typedef struct {
+	uint8_t color_id, client_id;
+	int32_t x, y;
+} PlayerState;
+
+typedef struct {
 	MessageType type;
-	int32_t rows, columns;
+	uint32_t rows, columns;
+	uint32_t player_count;
 } MessageHeader;

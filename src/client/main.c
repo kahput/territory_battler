@@ -8,7 +8,6 @@
 #include <raymath.h>
 
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 #include <sys/socket.h>
@@ -45,6 +44,9 @@ int main(int32_t argc, char* argv[]) {
 	uint8_t* world_grid = NULL;
 	uint32_t rows = 0, columns = 0;
 
+	PlayerState players[4] = { 0 };
+	uint32_t player_count = 0;
+
 	while (!WindowShouldClose()) {
 		ClearBackground(RAYWHITE);
 		arena_clear(state.frame_arena);
@@ -55,12 +57,16 @@ int main(int32_t argc, char* argv[]) {
 		while (client_poll(client, &event)) {
 			if (event.type == NET_EVENT_RECEIVE) {
 				MessageHeader* header = (MessageHeader*)event.data;
-				if (header->type == MESSAGE_TYPE_WORLD_DATA) {
+				if (header->type == MESSAGE_TYPE_GAME_STATE) {
+					player_count = header->player_count;
 					rows = ntohl(header->rows), columns = ntohl(header->columns);
-					uint32_t size = rows * columns;
-					printf("Got world data message of size %i\n", size);
-					world_grid = arena_push_array_zero(state.permanent_arena, uint8_t, size);
-					memcpy(world_grid, header + 1, size);
+
+					uint32_t grid_size = (rows * columns);
+					if (!world_grid)
+						world_grid = arena_push_array_zero(state.permanent_arena, uint8_t, grid_size);
+
+					memcpy(players, event.data + sizeof(MessageHeader), sizeof(PlayerState) * player_count);
+					memcpy(world_grid, event.data + sizeof(MessageHeader) + (sizeof(PlayerState) * player_count), grid_size);
 				}
 			}
 		}
@@ -87,7 +93,12 @@ int main(int32_t argc, char* argv[]) {
 		client_send(client, data, sizeof data);
 
 		BeginDrawing();
+
 		draw_grid(world_grid, rows, columns);
+		for (uint32_t i = 0; i < player_count; i++) {
+			DrawRectangle(players[i].x * GRID_SIZE, players[i].y * GRID_SIZE, GRID_SIZE, GRID_SIZE, colors[players[i].client_id]);
+			DrawRectangleLines(players[i].x * GRID_SIZE, players[i].y * GRID_SIZE, GRID_SIZE, GRID_SIZE, BLACK);
+		}
 		EndDrawing();
 	}
 
