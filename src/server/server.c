@@ -89,7 +89,7 @@ void server_update(Arena* arena, Server* server) {
 			int32_t client_index = poll_index - 1;
 			uint8_t buffer[1024];
 			int32_t result = 0;
-			result = socket_recv(server->clients[client_index].sock, buffer, sizeof(buffer));
+			result = socket_recv(server->clients[client_index].sock, buffer, sizeof(buffer), 0);
 
 			// Disconnect message
 			if (result == 0) {
@@ -108,7 +108,7 @@ void server_update(Arena* arena, Server* server) {
 			else {
 				server->event_stack[server->event_count] = (NetEvent){
 					.type = NET_EVENT_RECEIVE,
-					.client_id = poll_list[poll_index].fd,
+					.client_id = client_index,
 					.data = arena_push_array(arena, uint8_t, result),
 					.size = result
 				};
@@ -133,7 +133,7 @@ void server_send(Server* server, int32_t client_id, void* data, int32_t size) {
 }
 void server_broadcast(Server* server, void* data, int32_t size) {
 	for (uint32_t i = 0; i < server->client_count; i++) {
-		printf("Sending message [%s] to client %i\n", (char*)data, i + 1);
+		printf("Sending message to client %i\n", i + 1);
 		socket_send(server->clients[i].sock, data, size);
 	}
 }

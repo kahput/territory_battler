@@ -171,8 +171,8 @@ int32_t socket_send(Socket* sock, const int8_t* data, uint32_t size) {
 	return bytes_sent;
 }
 
-int32_t socket_recv(Socket* sock, void* data, uint32_t size) {
-	int32_t result = recv(sock->file_descriptor, data, size, 0);
+int32_t socket_recv(Socket* sock, void* data, uint32_t size, int32_t flags) {
+	int32_t result = recv(sock->file_descriptor, data, size, flags);
 	if (result == -1) {
 		perror("recv");
 		return false;

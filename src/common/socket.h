@@ -20,4 +20,4 @@ bool socket_connect(Socket* sock, const char* address, uint16_t port);
 // NetEvent* socket_poll(Arena* arena);
 
 int32_t socket_send(Socket* sock, const int8_t* data, uint32_t size);
-int32_t socket_recv(Socket* sock, void* data, uint32_t size);
+int32_t socket_recv(Socket* sock, void* data, uint32_t size, int32_t flags);

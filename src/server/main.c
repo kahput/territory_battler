@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <string.h>
 #include <sys/socket.h>
 
 #include <stdint.h>
@@ -37,14 +38,14 @@ typedef struct _player {
 typedef struct _game_state {
 	Arena *permanent_arena, *frame_arena;
 
-	Player *players;
+	Player* players;
 	uint32_t player_count, player_capacity;
 } GameState;
 
 // static Color colors[5] = { RAYWHITE, RED, BLUE, GREEN, ORANGE };
 
 uint32_t owned_neighbor_count(uint32_t target, uint32_t index);
-bool encolsure_fill(Arena *arena, uint32_t index, uint32_t target, uint8_t grid[ROWS * COLUMNS]);
+bool encolsure_fill(Arena* arena, uint32_t index, uint32_t target, uint8_t grid[ROWS * COLUMNS]);
 
 GridCoord to_2D(int32_t direction);
 void print_player(Player p);
@@ -57,8 +58,9 @@ int main() {
 	};
 	state.players = arena_push_array_zero(state.permanent_arena, Player, state.player_capacity);
 
-	Server *server = server_create(state.permanent_arena, 5050, 4);
-	uint8_t *world_grid = arena_push_array_zero(state.permanent_arena, uint8_t, ROWS *COLUMNS);
+	Server* server = server_create(state.permanent_arena, 5050, 4);
+	uint8_t* world_grid = arena_push_array_zero(state.permanent_arena, uint8_t, ROWS* COLUMNS);
+	world_grid[0] = 1;
 
 	while (1) {
 		arena_clear(state.frame_arena);
@@ -78,8 +80,18 @@ int main() {
 				state.players[state.player_count++] = new_player;
 
 				print_player(new_player);
-				char message[1024];
-				snprintf(message, sizeof message, "Client %i, your world position is %i, %i", event.client_id + 1, new_player.position.x, new_player.position.y);
+				uint8_t message[sizeof(MessageHeader) + (ROWS * COLUMNS)];
+				memcpy((uint8_t*)message + sizeof(MessageHeader), world_grid, ROWS * COLUMNS);
+
+				MessageHeader* header = (MessageHeader*)message;
+				*header = (MessageHeader){
+					.type = MESSAGE_TYPE_WORLD_DATA,
+					.rows = htonl(ROWS),
+					.columns = htonl(COLUMNS)
+				};
+
+				// char message[1024];
+				// snprintf(message, sizeof message, "Client %i, your world position is %i, %i", event.client_id + 1, new_player.position.x, new_player.position.y);
 				server_broadcast(server, message, sizeof message);
 			}
 			if (event.type == NET_EVENT_DISCONNECT) {
@@ -89,16 +101,20 @@ int main() {
 				printf("Client %i connection closed\n", event.client_id + 1);
 			}
 			if (event.type == NET_EVENT_RECEIVE) {
-				uint8_t new_direction = *event.data;
-				if (new_direction != 0 && new_direction <= 4)
-					state.players[event.client_id].direction = new_direction;
+				MessageHeader* header = (MessageHeader*)event.data;
+				if (header->type == MESSAGE_TYPE_DIRECTION) {
+					uint8_t new_direction = *(event.data + sizeof(MessageHeader));
+					// printf("Client %i sent direction data %i\n", event.client_id + 1, new_direction);
+					if (new_direction != 0 && new_direction <= 4)
+						state.players[event.client_id].direction = new_direction;
+				}
 			}
 		}
 
 		// WORLD LOGIC
 
 		for (uint32_t i = 0; i < state.player_count; i++) {
-			Player *player = &state.players[i];
+			Player* player = &state.players[i];
 			if (player->direction != 0) {
 				// Vector2 new_position = Vector2Add(player.position, Vector2Scale(to_vec2(player.direction), GRID_SIZE));
 				GridCoord direction = to_2D(player->direction);
@@ -137,10 +153,10 @@ void print_player(Player p) {
 		(float)p.position.x * COLUMNS, (float)p.position.y * ROWS);
 }
 
-void flood_fill(Arena *arena, uint32_t index, uint32_t target, uint8_t grid[ROWS * COLUMNS]) {
-	int32_t *stack = arena_push_array(arena, int32_t, ROWS *COLUMNS);
-	bool *visisted = arena_push_array(arena, bool, ROWS *COLUMNS);
-	uint32_t *result = arena_push_array_zero(arena, uint32_t, ROWS *COLUMNS);
+void flood_fill(Arena* arena, uint32_t index, uint32_t target, uint8_t grid[ROWS * COLUMNS]) {
+	int32_t* stack = arena_push_array(arena, int32_t, ROWS* COLUMNS);
+	bool* visisted = arena_push_array(arena, bool, ROWS* COLUMNS);
+	uint32_t* result = arena_push_array_zero(arena, uint32_t, ROWS* COLUMNS);
 	uint32_t stack_pointer = 0, result_pointer = 0;
 	stack[stack_pointer++] = index;
 
@@ -172,8 +188,8 @@ void flood_fill(Arena *arena, uint32_t index, uint32_t target, uint8_t grid[ROWS
 	}
 }
 
-bool encolsure_fill(Arena *arena, uint32_t index, uint32_t target, uint8_t grid[ROWS * COLUMNS]) {
-	int32_t *neighbors = arena_push_array(arena, int32_t, 8);
+bool encolsure_fill(Arena* arena, uint32_t index, uint32_t target, uint8_t grid[ROWS * COLUMNS]) {
+	int32_t* neighbors = arena_push_array(arena, int32_t, 8);
 	uint32_t neighbor_count = 0;
 
 	uint32_t x = index % COLUMNS, y = index / COLUMNS;
